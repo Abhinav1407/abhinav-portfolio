@@ -167,7 +167,8 @@
 
   <!-- ── Background Layer ── -->
   <!-- No inline style here — JS sets the background on every load to avoid stale/broken paths -->
-  <div id="bg-layer" class="absolute inset-0 bg-cover bg-center"></div>
+  <!-- bg-layer: JS sets the image; gradient shows instantly as fallback -->
+  <div id="bg-layer" class="absolute inset-0 bg-cover bg-center" style="background: linear-gradient(135deg,#0f0c29,#302b63,#24243e);"></div>
   <div class="absolute inset-0 bg-black/40"></div>
 
   <!-- ── Header ── -->
@@ -286,28 +287,24 @@
   <script>
   'use strict';
 
-  /* ──────────────────────────────────────────────────
-   * CONFIGURATION
+  /* ══════════════════════════════════════════════════
+   * EDIT THIS to add / remove songs.
    *
-   * Songs are auto-discovered from playlist.json.
-   * playlist.json lives next to index.html and lists
-   * every MP3 filename inside /music/ — no titles or
-   * artists needed; those come from ID3 tags at runtime.
+   * Just list the filename — title and artist are read
+   * automatically from each MP3's ID3 tags at runtime.
+   * The filename (minus extension) is the fallback name.
    *
-   * playlist.json format (minimal):
-   *   ["song1.mp3", "song2.mp3", "song3.mp3"]
+   * Plain:    "song1.mp3"
+   * Override: { file: "song2.mp3", title: "My Title", artist: "Me" }
    *
-   * Or with optional overrides per track:
-   *   [
-   *     "song1.mp3",
-   *     { "file": "song2.mp3", "title": "My Title", "artist": "Me" },
-   *     "song3.mp3"
-   *   ]
-   *
-   * To add a song: drop the .mp3 into /music/ and add
-   * its filename to playlist.json. That's it.
-   * ────────────────────────────────────────────────── */
-  const PLAYLIST_JSON_PATH = 'playlist.json'; // relative to index.html
+   * All files must live in the  music/  folder.
+   * Works with file://, localhost, and GitHub Pages.
+   * ══════════════════════════════════════════════════ */
+  const PLAYLIST = [
+    "song1.mp3",
+    // "song2.mp3",
+    // "song3.mp3",
+  ];
 
   // Paths are relative to index.html.
   // Add/remove filenames here as you add images to /backgrounds/.
@@ -329,28 +326,28 @@
    * ────────────────────────────────────────────────── */
   (function initBackground() {
     const bgLayer = document.getElementById('bg-layer');
-
-    // Fallback: cinematic dark gradient if no images load
     const FALLBACK = 'linear-gradient(135deg,#0f0c29,#302b63,#24243e)';
 
-    if (BACKGROUNDS.length === 0) {
-      bgLayer.style.background = FALLBACK;
-      return;
-    }
+    // Gradient is already set via inline style — so the page is never black.
+    // JS now tries to upgrade it to a real image.
 
-    const lastBg = sessionStorage.getItem('ps_last_bg');
+    if (BACKGROUNDS.length === 0) return; // keep gradient
+
+    const lastBg   = sessionStorage.getItem('ps_last_bg');
     let candidates = BACKGROUNDS.filter(b => b !== lastBg);
     if (candidates.length === 0) candidates = BACKGROUNDS;
     const chosen = candidates[Math.floor(Math.random() * candidates.length)];
     sessionStorage.setItem('ps_last_bg', chosen);
 
-    // Probe the image before applying — gives a clean fallback
-    // if the file doesn't exist yet (e.g. during local dev).
+    // Probe before applying so a missing file silently keeps the gradient
     const probe = new Image();
-    probe.onload  = () => { bgLayer.style.backgroundImage = `url('${chosen}')`; };
+    probe.onload  = () => {
+      bgLayer.style.background      = '';           // clear gradient
+      bgLayer.style.backgroundImage = `url('${chosen}')`;
+    };
     probe.onerror = () => {
-      console.warn(`[Phantom Studios] Background not found: ${chosen}. Using gradient fallback.`);
-      bgLayer.style.background = FALLBACK;
+      console.warn('[Phantom Studios] Background not found:', chosen);
+      // Gradient fallback is already showing — nothing to do
     };
     probe.src = chosen;
   })();
@@ -807,87 +804,55 @@
   }
 
   /* ──────────────────────────────────────────────────
-   * INITIALISE — fetch playlist.json, build tracks,
-   * enrich with ID3 metadata in the background.
+   * INITIALISE
+   * Reads the inline PLAYLIST array (no fetch needed —
+   * works on file://, localhost, and GitHub Pages).
+   * Then enriches every track with ID3 metadata in the
+   * background so real titles/artwork appear quickly.
    * ────────────────────────────────────────────────── */
-  async function init() {
-    // Show loading state
-    playlistEmpty.innerHTML = `
-      <p class="text-2xl mb-2">⏳</p>
-      <p class="text-white/40 text-sm">Loading playlist…</p>`;
-    playlistEmpty.style.display = '';
-
-    let manifest = [];
-    try {
-      const res = await fetch(PLAYLIST_JSON_PATH);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      manifest = await res.json();
-    } catch (err) {
-      console.warn('[Phantom Studios] Could not load playlist.json:', err.message);
-      playlistEmpty.innerHTML = `
-        <p class="text-2xl mb-2">🎵</p>
-        <p class="text-white/40 text-sm">No playlist found.</p>
-        <p class="text-[11px] text-white/30 mt-1">
-          Create <code class="bg-white/10 px-1 rounded">playlist.json</code> next to
-          <code class="bg-white/10 px-1 rounded">index.html</code>, or use
-          "Load Local Music" above.
-        </p>`;
-      return;
-    }
-
-    // Normalise manifest entries.
-    // Each entry is either a plain filename string or an object
-    // { file, title?, artist?, artwork? }
-    playlist = manifest.map((entry) => {
-      if (typeof entry === 'string') {
-        const filename = entry;
-        const cleanName = filename.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
-        return {
-          title:  cleanName,   // overwritten by ID3 if available
-          artist: '',          // overwritten by ID3 if available
-          src:    `music/${filename}`,
-          artwork: null,
-        };
-      } else {
-        // Object form — honour any manual overrides
-        const filename  = entry.file;
-        const cleanName = filename.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
-        return {
-          title:   entry.title  || cleanName,
-          artist:  entry.artist || '',
-          src:     `music/${filename}`,
-          artwork: entry.artwork || null,
-          // Lock manual overrides so enrichment won't clobber them
-          _titleLocked:  !!entry.title,
-          _artistLocked: !!entry.artist,
-        };
-      }
+  function init() {
+    // Normalise each entry in PLAYLIST to a track object
+    playlist = PLAYLIST.map((entry) => {
+      const filename  = (typeof entry === 'string') ? entry : entry.file;
+      const cleanName = filename.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+      return {
+        title:        (typeof entry === 'object' && entry.title)  || cleanName,
+        artist:       (typeof entry === 'object' && entry.artist) || '',
+        src:          'music/' + filename,
+        artwork:      (typeof entry === 'object' && entry.artwork) || null,
+        _titleLocked: (typeof entry === 'object' && !!entry.title),
+        _artistLocked:(typeof entry === 'object' && !!entry.artist),
+      };
     });
 
     if (playlist.length === 0) {
       playlistEmpty.innerHTML = `
         <p class="text-2xl mb-2">🎵</p>
-        <p class="text-white/40 text-sm">playlist.json is empty.</p>
-        <p class="text-[11px] text-white/30 mt-1">Add filenames to it or use "Load Local Music".</p>`;
+        <p class="text-white/40 text-sm">No songs in playlist.</p>
+        <p class="text-[11px] text-white/30 mt-1">
+          Add filenames to the <code class="bg-white/10 px-1 rounded">PLAYLIST</code>
+          array in index.html, or use "Load Local Music".
+        </p>`;
+      playlistEmpty.style.display = '';
       return;
     }
 
     buildPlaylist();
 
-    // Pre-select first track (no autoplay)
+    // Pre-select first track without autoplay
     currentIndex = 0;
     const first = playlist[0];
     songTitle.textContent  = first.title  || 'Unknown';
-    songArtist.textContent = first.artist || 'Select a track to begin';
+    songArtist.textContent = first.artist || 'Click play to begin';
     if (first.artwork) applyArtwork(first.artwork);
     playBtn.classList.remove('pointer-events-none', 'opacity-50');
     updateActiveTrack();
 
-    // Enrich all tracks with ID3 metadata in the background
-    // (staggered so we don't hammer the server)
+    // Enrich all tracks with real ID3 metadata in background
+    // Staggered 150ms apart to avoid hammering the server
     playlist.forEach((track, i) => {
       if (!track._file) {
-        setTimeout(() => enrichTrackMetadata(track, i), i * 120);
+        setTimeout(() => enrichTrackMetadata(track, i), i * 150);
       }
     });
   }
