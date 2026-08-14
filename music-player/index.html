@@ -773,42 +773,12 @@
    * Updates the track object and refreshes the UI if
    * this track is currently playing.
    * ────────────────────────────────────────────────── */
-  function enrichTrackMetadata(track, index) {
-    // jsmediatags uses XHR internally — that is blocked on file://.
-    // Skip silently; the filename is already set as the fallback title.
-    if (location.protocol === 'file:') return;
-
-    window.jsmediatags.read(track.src, {
-      onSuccess: (tag) => {
-        let changed = false;
-
-        if (tag.tags.title && !track._titleLocked) {
-          track.title = tag.tags.title;
-          changed = true;
-        }
-        if (tag.tags.artist && !track._artistLocked) {
-          track.artist = tag.tags.artist;
-          changed = true;
-        }
-
-        const pic = tag.tags.picture;
-        if (pic && !track.artwork) {
-          const blob = new Blob([new Uint8Array(pic.data)], { type: pic.format });
-          track.artwork = URL.createObjectURL(blob);
-          if (index === currentIndex) applyArtwork(track.artwork);
-        }
-
-        if (changed) {
-          buildPlaylist();
-          if (index === currentIndex) {
-            songTitle.textContent  = track.title  || 'Unknown Title';
-            songArtist.textContent = track.artist || 'Unknown Artist';
-          }
-        }
-      },
-      onError: () => {} // silently ignore — filename fallback already set
-    });
-  }
+  // enrichTrackMetadata intentionally removed:
+  // jsmediatags needs XHR to read a URL-based MP3, which fails in many
+  // local/CORS environments. ID3 tags are only read for locally-uploaded
+  // files (via the File object), where jsmediatags uses a FileReader
+  // instead of XHR — that always works. For repo/hosted files the
+  // filename is used as the title (already cleaned up in init()).
 
   /* ──────────────────────────────────────────────────
    * INITIALISE
@@ -855,13 +825,8 @@
     playBtn.classList.remove('pointer-events-none', 'opacity-50');
     updateActiveTrack();
 
-    // Enrich all tracks with real ID3 metadata in background
-    // Staggered 150ms apart to avoid hammering the server
-    playlist.forEach((track, i) => {
-      if (!track._file) {
-        setTimeout(() => enrichTrackMetadata(track, i), i * 150);
-      }
-    });
+    // ID3 metadata for repo tracks is read from the PLAYLIST array overrides.
+    // For locally-uploaded files, jsmediatags reads tags via FileReader (in loadTrack).
   }
 
   init();
