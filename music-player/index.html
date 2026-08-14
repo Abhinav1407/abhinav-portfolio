@@ -168,7 +168,7 @@
   <!-- ── Background Layer ── -->
   <!-- No inline style here — JS sets the background on every load to avoid stale/broken paths -->
   <!-- bg-layer: JS sets the image; gradient shows instantly as fallback -->
-  <div id="bg-layer" class="absolute inset-0 bg-cover bg-center" style="background: linear-gradient(135deg,#0f0c29,#302b63,#24243e);"></div>
+  <div id="bg-layer" class="absolute inset-0 bg-cover bg-center" style="background-image: url('backgrounds/bg1.jpg');"></div>
   <div class="absolute inset-0 bg-black/40"></div>
 
   <!-- ── Header ── -->
@@ -301,58 +301,13 @@
    * Works with file://, localhost, and GitHub Pages.
    * ══════════════════════════════════════════════════ */
   const PLAYLIST = [
-    "song1.mp3"
+    "song1.mp3",
     // "song2.mp3",
     // "song3.mp3",
   ];
 
-  // Paths are relative to index.html.
-  // Add/remove filenames here as you add images to /backgrounds/.
-  const BACKGROUNDS = [
-    "backgrounds/bg1.jpg"
-  ];
-
-  /* ──────────────────────────────────────────────────
-   * BACKGROUND — random on every load, avoids last-used,
-   * falls back to a gradient if the image file is missing.
-   *
-   * Paths in BACKGROUNDS must be relative to index.html.
-   * e.g. "backgrounds/bg1.jpg" works whether the page is
-   * opened as file:// or served from any sub-path like
-   * myportfolio.site/music-player/ — the browser resolves
-   * them relative to the page automatically.
-   * ────────────────────────────────────────────────── */
-  (function initBackground() {
-    const bgLayer = document.getElementById('bg-layer');
-    if (BACKGROUNDS.length === 0) return; // gradient fallback already set inline
-
-    const lastBg   = sessionStorage.getItem('ps_last_bg');
-    let candidates = BACKGROUNDS.filter(b => b !== lastBg);
-    if (candidates.length === 0) candidates = BACKGROUNDS;
-    const chosen = candidates[Math.floor(Math.random() * candidates.length)];
-    sessionStorage.setItem('ps_last_bg', chosen);
-
-    const isFileProtocol = location.protocol === 'file:';
-
-    if (isFileProtocol) {
-      // On file:// Image probing is unreliable — set directly.
-      // CSS background-color on body acts as the colour fallback.
-      bgLayer.style.background      = '';
-      bgLayer.style.backgroundImage = `url('${chosen}')`;
-    } else {
-      // On http(s):// probe first so a missing file keeps the gradient
-      const probe = new Image();
-      probe.onload  = () => {
-        bgLayer.style.background      = '';
-        bgLayer.style.backgroundImage = `url('${chosen}')`;
-      };
-      probe.onerror = () => {
-        console.warn('[Phantom Studios] Background not found:', chosen,
-          '— using gradient fallback.');
-      };
-      probe.src = chosen;
-    }
-  })();
+  // Single background image. The image is set directly on #bg-layer above.
+  const BACKGROUNDS = ["backgrounds/bg1.jpg"];
 
   /* ──────────────────────────────────────────────────
    * CLOCK
