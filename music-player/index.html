@@ -18,7 +18,7 @@
       font-family: 'Hind', sans-serif;
       font-weight: 700;
     }
-    body { font-family: 'Hind', sans-serif; }
+    body { font-family: 'Hind', sans-serif; background-color: #0f0c29; }
 
     /* ── Background transition ── */
     #bg-layer {
@@ -309,7 +309,9 @@
   // Paths are relative to index.html.
   // Add/remove filenames here as you add images to /backgrounds/.
   const BACKGROUNDS = [
-    "backgrounds/bg1.jpg"
+    "backgrounds/bg1.jpg",
+    "backgrounds/bg2.jpg",
+    "backgrounds/bg3.jpg",
   ];
 
   /* ──────────────────────────────────────────────────
@@ -324,12 +326,7 @@
    * ────────────────────────────────────────────────── */
   (function initBackground() {
     const bgLayer = document.getElementById('bg-layer');
-    const FALLBACK = 'linear-gradient(135deg,#0f0c29,#302b63,#24243e)';
-
-    // Gradient is already set via inline style — so the page is never black.
-    // JS now tries to upgrade it to a real image.
-
-    if (BACKGROUNDS.length === 0) return; // keep gradient
+    if (BACKGROUNDS.length === 0) return; // gradient fallback already set inline
 
     const lastBg   = sessionStorage.getItem('ps_last_bg');
     let candidates = BACKGROUNDS.filter(b => b !== lastBg);
@@ -337,17 +334,26 @@
     const chosen = candidates[Math.floor(Math.random() * candidates.length)];
     sessionStorage.setItem('ps_last_bg', chosen);
 
-    // Probe before applying so a missing file silently keeps the gradient
-    const probe = new Image();
-    probe.onload  = () => {
-      bgLayer.style.background      = '';           // clear gradient
+    const isFileProtocol = location.protocol === 'file:';
+
+    if (isFileProtocol) {
+      // On file:// Image probing is unreliable — set directly.
+      // CSS background-color on body acts as the colour fallback.
+      bgLayer.style.background      = '';
       bgLayer.style.backgroundImage = `url('${chosen}')`;
-    };
-    probe.onerror = () => {
-      console.warn('[Phantom Studios] Background not found:', chosen);
-      // Gradient fallback is already showing — nothing to do
-    };
-    probe.src = chosen;
+    } else {
+      // On http(s):// probe first so a missing file keeps the gradient
+      const probe = new Image();
+      probe.onload  = () => {
+        bgLayer.style.background      = '';
+        bgLayer.style.backgroundImage = `url('${chosen}')`;
+      };
+      probe.onerror = () => {
+        console.warn('[Phantom Studios] Background not found:', chosen,
+          '— using gradient fallback.');
+      };
+      probe.src = chosen;
+    }
   })();
 
   /* ──────────────────────────────────────────────────
@@ -768,7 +774,10 @@
    * this track is currently playing.
    * ────────────────────────────────────────────────── */
   function enrichTrackMetadata(track, index) {
-    // jsmediatags can read from a URL directly
+    // jsmediatags uses XHR internally — that is blocked on file://.
+    // Skip silently; the filename is already set as the fallback title.
+    if (location.protocol === 'file:') return;
+
     window.jsmediatags.read(track.src, {
       onSuccess: (tag) => {
         let changed = false;
@@ -790,14 +799,14 @@
         }
 
         if (changed) {
-          buildPlaylist(); // refresh track names in list
+          buildPlaylist();
           if (index === currentIndex) {
             songTitle.textContent  = track.title  || 'Unknown Title';
             songArtist.textContent = track.artist || 'Unknown Artist';
           }
         }
       },
-      onError: () => {} // silently ignore — filename fallback is already set
+      onError: () => {} // silently ignore — filename fallback already set
     });
   }
 
